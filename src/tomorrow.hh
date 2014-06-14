@@ -23,17 +23,18 @@ namespace tomorrow {
 	template<class TYPE> class Proxy;
 
 
+
 	template<class TYPE>
 	class Instance : public node::ObjectWrap {
 	private:
 
-		friend Trap;
-		friend Direct;
+		friend TYPE;
 		friend Proxy<TYPE>;
 
-		static Persistent<ObjectTemplate> definition;
+		Persistent<Object>					target;
+		static Persistent<ObjectTemplate>	definition;
 
-		Persistent<Object>	target;
+		void init(Handle<Object> exports, Handle<Object> module);
 
 
 		inline Instance(Handle<Object> target) {
@@ -44,6 +45,10 @@ namespace tomorrow {
 		inline void setTarget(Handle<Object> target) {
 			NanAssignPersistent(this->target, target);
 			NanObjectWrapHandle(this)->SetPrototype(target);
+		}
+
+		inline Handle<Object> getTarget() {
+			return target;
 		}
 
 	};
@@ -107,6 +112,10 @@ namespace tomorrow {
 	};
 
 
+	// A trapping proxy - similar to ES6 proxy, only a little simpler, less
+	// restrictive (and much more dangerous!).  Throwing exceptions from 'delete'
+	// and 'enumerate' segfault node - Even with a TryCatch in scope - I've yet
+	// to work out how to catch those...
 	class Trap : public Instance<Trap> {
 	private:
 
@@ -117,17 +126,27 @@ namespace tomorrow {
 	public:
 
 		static NAN_METHOD(Call);
+
 		static NAN_PROPERTY_GETTER(Get);
 		static NAN_PROPERTY_SETTER(Set);
 		static NAN_PROPERTY_DELETER(Delete);
 		static NAN_PROPERTY_QUERY(Query);
 		static NAN_PROPERTY_ENUMERATOR(Enumerate);
 
+		static NAN_INDEX_GETTER(IndexGet);
+		static NAN_INDEX_SETTER(IndexSet);
+		static NAN_INDEX_DELETER(IndexDelete);
+		static NAN_INDEX_QUERY(IndexQuery);
+		static NAN_INDEX_ENUMERATOR(IndexEnumerate);
+
 		static void init(Handle<Object> exports, Handle<Object> module);
 
 	};
 
 
+	// A direct passthrough proxy - basically, just prototype inheritance, but
+	// where writes operate directly on the target, and invocations of the
+	// 'object' execute on the target.
 	class Direct : public Instance<Direct> {
 	private:
 
@@ -138,21 +157,17 @@ namespace tomorrow {
 	public:
 
 		static NAN_METHOD(Call);
-		static NAN_PROPERTY_GETTER(Get);
 		static NAN_PROPERTY_SETTER(Set);
 		static NAN_PROPERTY_DELETER(Delete);
-		static NAN_PROPERTY_QUERY(Query);
-		static NAN_PROPERTY_ENUMERATOR(Enumerate);
+
+		static NAN_INDEX_SETTER(Direct::IndexSet);
+		static NAN_INDEX_DELETER(Direct::IndexDelete);
 
 		static void init(Handle<Object> exports, Handle<Object> module);
 
 	};
 
-
-	void init(Handle<Object> exports, Handle<Object> module);
-
-
-};
+}
 
 
 #endif // TOMORROW_TOMORROW_HH
