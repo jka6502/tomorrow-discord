@@ -1,11 +1,9 @@
 // Native extension to support 'resolvable' objects in node, to implement
 // the resolve-on-use promise pattern in Tomorrow.
 
-#include <v8.h>
-#include <node.h>
+
 #include <vector>
-#include <stdio.h>
-#include <nan.h>
+#include "tomorrow.hh"
 
 
 namespace tomorrow {
@@ -14,154 +12,90 @@ namespace tomorrow {
 	using namespace v8;
 
 
-	Persistent<String> TRAP_CALL;
-	Persistent<String> TRAP_GET;
-	Persistent<String> TRAP_SET;
-	Persistent<String> TRAP_QUERY;
-	Persistent<String> TRAP_ENUMERATE;
+	/** ---------------------------- STORAGE -------------------------------- */
 
 
-	class Proxy : public node::ObjectWrap {
-	private:
+	Persistent<ObjectTemplate>	Instance<Trap>::definition;
+	Persistent<ObjectTemplate>	Instance<Direct>::definition;
 
-		static Persistent<Function>			proxyConstructor;
-		static Persistent<ObjectTemplate>	instanceTemplate;
+	Persistent<Function>	Proxy<Trap>::constructor;
+	Persistent<Function>	Proxy<Direct>::constructor;
 
-		Persistent<Object> instance;
-		Persistent<Object> traps;
 
-	public:
+	/** ----------------------------- TRAP ---------------------------------- */
 
-		Proxy() {
-			Local<Object> instance = instanceTemplate->NewInstance();
-			NanAssignPersistent(this->instance, instance);
-			NanSetInternalFieldPointer(instance, 0, this);
+
+
+
+	/** -------------------------- PASS THROUGH ----------------------------- */
+
+
+	NAN_METHOD(Direct::Call) {
+		NanScope();
+		Direct *direct = Unwrap<Direct>(args.Holder());
+		Handle<Function> func = direct->target.As<Function>();
+		int count = args.Length();
+		std::vector<Handle<Value>> params(count);
+		for(int index = 0; index < count; index++) {
+			params.push_back(args[index]);
 		}
+		NanReturnValue(func->Call(args.This(), count, &params[0]));
+	}
 
-		~Proxy() {}
+	NAN_PROPERTY_GETTER(Direct::Get) {
+		NanScope();
+		Direct *direct = Unwrap<Direct>(args.Holder());
+		NanReturnValue(direct->target->Get(property));
+	}
 
+	NAN_PROPERTY_SETTER(Direct::Set) {
+		NanScope();
+		Direct *direct = Unwrap<Direct>(args.Holder());
+		direct->target->Set(property, value);
+		NanReturnUndefined();
+	}
 
-		static NAN_METHOD(InstanceSetPrototype) {
-			NanScope();
-			Proxy *proxy = ObjectWrap::Unwrap<Proxy>(args.This());
-			proxy->instance->SetPrototype(args[0]);
-			NanReturnUndefined();
-		}
+	NAN_PROPERTY_DELETER(Direct::Delete) {
+		NanScope();
+		Direct *direct = Unwrap<Direct>(args.Holder());
+		NanReturnValue(NanNew<Boolean>(direct->target->Delete(property)));
+	}
 
-		static NAN_GETTER(GetInstance) {
-			NanScope();
-			Proxy *proxy = ObjectWrap::Unwrap<Proxy>(args.This());
-			NanReturnValue(proxy->instance);
-		}
+	NAN_PROPERTY_QUERY(Direct::Query) {
+		NanScope();
+		Direct *direct = Unwrap<Direct>(args.Holder());
+		NanReturnValue(NanNew<Integer>(direct->target->GetPropertyAttributes(property)));
+	}
 
-		static NAN_PROPERTY_GETTER(InstancePropertyGet) {
-			NanScope();
-			String::AsciiValue prop(property);
-			printf("Property get: %s\n", *prop);
-			NanReturnUndefined();
-		}
+	NAN_PROPERTY_ENUMERATOR(Direct::Enumerate) {
+		NanScope();
+		Direct *direct = Unwrap<Direct>(args.Holder());
+		NanReturnValue(direct->target->GetPropertyNames());
+	}
 
-		static NAN_PROPERTY_SETTER(InstancePropertySet) {
-			NanScope();
-			String::AsciiValue prop(property);
-			String::AsciiValue val(value);
-			printf("Property set: %s, %s\n", *prop, *val);
-			NanReturnUndefined();
-		}
-
-		static NAN_PROPERTY_QUERY(InstancePropertyQuery) {
-			NanScope();
-			String::AsciiValue prop(property);
-			printf("Property query: %s\n", *prop);
-			NanReturnValue(Integer::New(0));
-		}
-
-		static NAN_PROPERTY_DELETER(InstancePropertyDelete) {
-			NanScope();
-			String::AsciiValue prop(property);
-			printf("Property delete: %s\n", *prop);
-			NanReturnValue(NanFalse());
-		}
-
-		static NAN_PROPERTY_ENUMERATOR(InstancePropertyEnumerate) {
-			NanScope();
-			printf("Property enumerate");
-			NanReturnValue(NanNew<Array>());
-		}
-
-		static NAN_METHOD(New) {
-			NanScope();
-			Proxy *proxy = new Proxy();
-			proxy->Wrap(args.This());
-			NanReturnValue(args.This());
-		}
-
-		static NAN_METHOD(InstanceCall) {
-			NanScope();
-			Proxy *proxy = static_cast<Proxy*>(NanGetInternalFieldPointer(args.This(), 0));
-
-			Local<Function> func;
-			Local<Value> callable = proxy->instance->GetPrototype();
-			if (callable->IsFunction()) {
-				func = callable.As<Function>();
-			}
-			if (func.IsEmpty()) {
-				NanThrowError("Not a function");
-				NanReturnUndefined();
-			}
-			Handle<Value> result;
-			std::vector<Handle<Value>> params;
-			int count = args.Length();
-			for(int index = 0; index < count; index++) {
-				params.push_back(args[index]);
-			}
-			NanReturnValue(func->Call(args.This(), count, &params[0]));
-		}
-
-		static void init(Handle<Object> exports, Handle<Object> module) {
-
-			NanAssignPersistent(TRAP_CALL, NanNew<String>("call"));
-			NanAssignPersistent(TRAP_GET, NanNew<String>("get"));
-			NanAssignPersistent(TRAP_SET, NanNew<String>("set"));
-			NanAssignPersistent(TRAP_QUERY, NanNew<String>("query"));
-			NanAssignPersistent(TRAP_ENUMERATE, NanNew<String>("enumerate"));
+	void Direct::init(Handle<Object> exports, Handle<Object> module) {
+		Local<FunctionTemplate> constructor = FunctionTemplate::New();
+		constructor->SetClassName(NanNew<String>("Instance"));
+		constructor->SetHiddenPrototype(true);
+		NanAssignPersistent(definition, constructor->InstanceTemplate());
+		definition->SetInternalFieldCount(1);
+		definition->SetNamedPropertyHandler(Get, Set, Query, Delete, Enumerate);
+		definition->SetCallAsFunctionHandler(Call);
+	}
 
 
-			Local<FunctionTemplate> instanceFunctionTemplate = NanNew<FunctionTemplate>();
-			instanceFunctionTemplate->SetClassName(NanNew<String>("Instance"));
-			instanceFunctionTemplate->SetHiddenPrototype(true);
-			NanAssignPersistent(instanceTemplate, instanceFunctionTemplate->InstanceTemplate());
-
-			instanceTemplate->SetNamedPropertyHandler(InstancePropertyGet, InstancePropertySet, InstancePropertyQuery, InstancePropertyDelete, InstancePropertyEnumerate);
-			instanceTemplate->SetCallAsFunctionHandler(InstanceCall);
-			instanceTemplate->SetInternalFieldCount(1);
-
-			Local<FunctionTemplate> constructorTemplate = NanNew<FunctionTemplate>(New);
-			Local<ObjectTemplate> proxyTemplate = constructorTemplate->InstanceTemplate();
-			proxyTemplate->SetInternalFieldCount(1);
-			proxyTemplate->Set(NanNew<String>("setInstancePrototype"), NanNew<FunctionTemplate>(InstanceSetPrototype)->GetFunction());
-			proxyTemplate->SetAccessor(NanNew<String>("instance"), GetInstance);
-
-			NanAssignPersistent(proxyConstructor, constructorTemplate->GetFunction());
-			exports->Set(NanNew<String>("Proxy"), proxyConstructor);
-
-		}
-
-	};
-
-
-
-	Persistent<Function>		Proxy::proxyConstructor;
-	Persistent<ObjectTemplate>	Proxy::instanceTemplate;
-
+	/** ------------------------------- INIT -------------------------------- */
 
 
 	void init(Handle<Object> exports, Handle<Object> module) {
-		Proxy::init(exports, module);
+//		Trap::init(exports, module);
+		Direct::init(exports, module);
+		exports->Set(NanNew<String>("Direct"), Proxy<Direct>::init());
 	}
 
 
 }
+
 
 
 NODE_MODULE(tomorrow, tomorrow::init);
