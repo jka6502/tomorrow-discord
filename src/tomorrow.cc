@@ -5,6 +5,7 @@
 #include <vector>
 #include <iostream>
 #include "tomorrow.hh"
+#include "macros.hh"
 
 
 namespace tomorrow {
@@ -45,24 +46,8 @@ namespace tomorrow {
 	/** ----------------------------- TRAP ---------------------------------- */
 
 
-	template<class A> inline Handle<Value> trapCall(Handle<Function> func, Handle<Object> that, Handle<A> a) {
-		if (!func->IsFunction()) { return Undefined(); }
-		Handle<Value> args[] = { a };
-		return func->Call(that, 1, args);
-	}
+	#define TRAP(NAME) Unwrap<Trap>(args.This())->target, Unwrap<Trap>(args.This())->target->Get(NAME).As<Function>()
 
-	template<class A, class B> inline Handle<Value> trapCall(Handle<Function> func, Handle<Object> that, Handle<A> a, Handle<B> b) {
-		if (!func->IsFunction()) { return Undefined(); }
-		Handle<Value> args[] = { a, b };
-		return func->Call(that, 2, args);
-	}
-
-	inline Handle<Value> trapCall(Handle<Function> func, Handle<Object> that) {
-		if (!func->IsFunction()) { return Undefined(); }
-		return func->Call(that, 0, NULL);
-	}
-
-	#define TRAP(NAME) Unwrap<Trap>(args.This())->target->Get(NAME).As<Function>(), Unwrap<Trap>(args.This())->target
 
 	NAN_METHOD(Trap::Call) {
 		NanScope();
@@ -78,54 +63,68 @@ namespace tomorrow {
 
 	NAN_PROPERTY_GETTER(Trap::Get) {
 		NanScope();
-		NanReturnValue(trapCall(TRAP(TRAP_GET), property));
+		CALL(result, TRAP(TRAP_GET), property);
+		NanReturnValue(result);
 	}
 
 	NAN_PROPERTY_SETTER(Trap::Set) {
 		NanScope();
-		trapCall(TRAP(TRAP_SET), property, value);
+		CALL(result, TRAP(TRAP_SET), property, value);
 		NanReturnUndefined();
 	}
 
 	NAN_PROPERTY_QUERY(Trap::Query) {
 		NanScope();
-		NanReturnValue(trapCall(TRAP(TRAP_QUERY), property).As<Integer>());
+		CALL(result, TRAP(TRAP_QUERY), property);
+		NanReturnValue(result.As<Integer>());
 	}
 
 	NAN_PROPERTY_DELETER(Trap::Delete) {
 		NanScope();
-		NanReturnValue(trapCall(TRAP(TRAP_DELETE), property)->ToBoolean());
+		CALL(result, TRAP(TRAP_DELETE), property);
+		NanReturnValue(result->ToBoolean());
 	}
 
 	NAN_PROPERTY_ENUMERATOR(Trap::Enumerate) {
 		NanScope();
-		NanReturnValue(trapCall(TRAP(TRAP_ENUMERATE)).As<Array>());
+		CALL(result, TRAP(TRAP_ENUMERATE));
+		if (!result->IsArray()) {
+			NanReturnValue(NanNew<Array>());
+		}
+		NanReturnValue(result.As<Array>());
 	}
 
 	NAN_INDEX_GETTER(Trap::IndexGet) {
 		NanScope();
-		NanReturnValue(trapCall(TRAP(TRAP_INDEX_GET), NanNew<Integer>(index)));
+		CALL(result, TRAP(TRAP_INDEX_GET), NanNew<Integer>(index));
+		NanReturnValue(result);
 	}
 
 	NAN_INDEX_SETTER(Trap::IndexSet) {
 		NanScope();
-		trapCall(TRAP(TRAP_INDEX_SET), NanNew<Integer>(index), value);
+		CALL(result, TRAP(TRAP_INDEX_SET), NanNew<Integer>(index), value);
 		NanReturnUndefined();
 	}
 
 	NAN_INDEX_QUERY(Trap::IndexQuery) {
 		NanScope();
-		NanReturnValue(trapCall(TRAP(TRAP_INDEX_QUERY), NanNew<Integer>(index)).As<Integer>());
+		CALL(result, TRAP(TRAP_INDEX_QUERY), NanNew<Integer>(index));
+		NanReturnValue(result.As<Integer>());
 	}
 
 	NAN_INDEX_DELETER(Trap::IndexDelete) {
 		NanScope();
-		NanReturnValue(trapCall(TRAP(TRAP_INDEX_DELETE), NanNew<Integer>(index))->ToBoolean());
+		CALL(result, TRAP(TRAP_INDEX_DELETE), NanNew<Integer>(index));
+		NanReturnValue(result->ToBoolean());
 	}
 
 	NAN_INDEX_ENUMERATOR(Trap::IndexEnumerate) {
 		NanScope();
-		NanReturnValue(trapCall(TRAP(TRAP_INDEX_ENUMERATE)).As<Array>());
+		CALL(result, TRAP(TRAP_INDEX_ENUMERATE));
+		if (!result->IsArray()) {
+			NanReturnValue(NanNew<Array>());
+		}
+		NanReturnValue(result.As<Array>());
 	}
 
 	void Trap::init(Handle<Object> exports, Handle<Object> module) {
@@ -204,9 +203,9 @@ namespace tomorrow {
 		NanAssignPersistent(definition, constructor->InstanceTemplate());
 		definition->SetInternalFieldCount(1);
 
-		// We only trap the modifications, and calls - since prototypical
-		// inheritance can handle the rest - and does so much, much faster then
-		// with an intercept in the way.
+		// Only trap the modifications, and calls - since prototypical
+		// inheritance can handle the rest - and does so much, much faster than
+		// can be achieved through an intercept.
 		definition->SetNamedPropertyHandler(NULL, Set, NULL, Delete);
 		definition->SetIndexedPropertyHandler(NULL, IndexSet, NULL, IndexDelete);
 		definition->SetCallAsFunctionHandler(Call);

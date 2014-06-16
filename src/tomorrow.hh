@@ -44,7 +44,6 @@ namespace tomorrow {
 
 		inline void setTarget(Handle<Object> target) {
 			NanAssignPersistent(this->target, target);
-			NanObjectWrapHandle(this)->SetPrototype(target);
 		}
 
 		inline Handle<Object> getTarget() {
@@ -152,7 +151,14 @@ namespace tomorrow {
 
 		friend Proxy<Direct>;
 
-		inline Direct(Handle<Object> target) : Instance(target) {};
+		inline Direct(Handle<Object> target) : Instance(target) {
+			NanObjectWrapHandle(this)->SetPrototype(target);
+		};
+
+		inline void setTarget(Handle<Object> target) {
+			NanAssignPersistent(this->target, target);
+			NanObjectWrapHandle(this)->SetPrototype(target);
+		}
 
 	public:
 
