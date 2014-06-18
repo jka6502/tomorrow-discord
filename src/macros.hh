@@ -1,13 +1,15 @@
 #ifndef TOMORROW_MACROS_HH
 #define TOMORROW_MACROS_HH
 
+
 #include <v8.h>
+
 
 using namespace v8;
 
 
 // Convenience calling macros - a bit ugly, but using overloaded functions
-// causes all manner of shenannigans to be required to handle scoping.
+// requires all manner of shenannigans to handle scoping.
 #define TRY_CALL_NOARG(RESULT, THIS, FUNC, ...) \
 	Handle<Value> RESULT; \
 	{ \
@@ -41,6 +43,7 @@ using namespace v8;
 #define EXPAND_OPTIONAL(PREFIX, ...) EXPAND(EXPAND_CHOOSE, PREFIX, __VA_ARGS__, EXPAND_SUFFIXES)
 #define EXPAND_COUNT(...) EXPAND(EXPAND_CHOOSE, 0+, __VA_ARGS__, EXPAND_NUMERICS)
 
+// Work around VC++ stupidity
 #define EXPAND_VC(MACRO, ARGS) MACRO ARGS
 #define EXPAND(MACRO, ...) EXPAND_VC(MACRO, (__VA_ARGS__))
 

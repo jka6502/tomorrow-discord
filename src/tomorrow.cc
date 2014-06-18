@@ -18,18 +18,20 @@ namespace tomorrow {
 	/** ---------------------------- STORAGE -------------------------------- */
 
 
-	Persistent<ObjectTemplate>	Instance<Trap>::definition;
-	Persistent<ObjectTemplate>	Instance<Direct>::definition;
+	Persistent<ObjectTemplate>		Instance<Trap>::definition;
+	Persistent<ObjectTemplate>		Instance<Direct>::definition;
 
-	Persistent<Function>	Proxy<Trap>::constructor;
-	Persistent<Function>	Proxy<Direct>::constructor;
+	Persistent<FunctionTemplate>	Direct::constructorTemplate;
+
+	Persistent<Function>			Proxy<Trap>::constructor;
+	Persistent<Function>			Proxy<Direct>::constructor;
 
 
 	/** ------------------------ REUSABLE STRINGS --------------------------- */
 
 
 	Persistent<String>		TRAP_CALL;
-
+ 
 	Persistent<String>		TRAP_GET;
 	Persistent<String>		TRAP_SET;
 	Persistent<String>		TRAP_DELETE;
@@ -182,7 +184,7 @@ namespace tomorrow {
 	}
 
 
-	NAN_INDEX_SETTER(Direct::IndexSet) {
+	NAN_INDEX_SETTER(Direct::IndexSet) {	
 		NanScope();
 		Direct *direct = Unwrap<Direct>(args.This());
 		direct->target->Set(index, value);
@@ -195,12 +197,21 @@ namespace tomorrow {
 		NanReturnValue(NanNew<Boolean>(direct->target->Delete(index)));
 	}
 
+	NAN_METHOD(Direct::GetDirectProxy) {
+		NanScope();
+		if (args.Length() < 1 || !args[0]->IsObject()
+				|| !constructorTemplate->HasInstance(args[0].As<Object>())) {
+			NanReturnNull();
+		}
+		Direct *direct = Unwrap<Direct>(args[0].As<Object>());
+		NanReturnValue(NanObjectWrapHandle(direct->proxy));
+	}
 
 
 	void Direct::init(Handle<Object> exports, Handle<Object> module) {
-		Local<FunctionTemplate> constructor = FunctionTemplate::New();
-		constructor->SetClassName(NanNew<String>("Instance"));
-		NanAssignPersistent(definition, constructor->InstanceTemplate());
+		NanAssignPersistent(constructorTemplate, FunctionTemplate::New());
+		constructorTemplate->SetClassName(NanNew<String>("Instance"));
+		NanAssignPersistent(definition, constructorTemplate->InstanceTemplate());
 		definition->SetInternalFieldCount(1);
 
 		// Only trap the modifications, and calls - since prototypical
@@ -209,6 +220,8 @@ namespace tomorrow {
 		definition->SetNamedPropertyHandler(NULL, Set, NULL, Delete);
 		definition->SetIndexedPropertyHandler(NULL, IndexSet, NULL, IndexDelete);
 		definition->SetCallAsFunctionHandler(Call);
+
+		exports->Set(NanNew<String>("getDirectProxy"), FunctionTemplate::New(GetDirectProxy)->GetFunction());
 	}
 
 

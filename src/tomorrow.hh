@@ -29,15 +29,16 @@ namespace tomorrow {
 	private:
 
 		friend TYPE;
+		friend Direct;
+		friend Trap;
 		friend Proxy<TYPE>;
 
 		Persistent<Object>					target;
 		static Persistent<ObjectTemplate>	definition;
+		Proxy<TYPE>							*proxy;
 
-		void init(Handle<Object> exports, Handle<Object> module);
 
-
-		inline Instance(Handle<Object> target) {
+		inline Instance(Proxy<TYPE> *proxy, Handle<Object> target) : proxy(proxy) {
 			Wrap(definition->NewInstance());
 			setTarget(target);
 		}
@@ -61,7 +62,7 @@ namespace tomorrow {
 		TYPE				*instance;
 
 		Proxy(Handle<Object> target) {
-			instance = new TYPE(target);
+			instance = new TYPE(this, target);
 		}
 
 	public:
@@ -111,16 +112,14 @@ namespace tomorrow {
 	};
 
 
-	// A trapping proxy - similar to ES6 proxy, only a little simpler, less
-	// restrictive (and much more dangerous!).  Throwing exceptions from 'delete'
-	// and 'enumerate' segfault node - Even with a TryCatch in scope - I've yet
-	// to work out how to catch those...
+	// A trapping proxy - similar to ES6 proxies, only a little simpler, and
+	// less restrictive.
 	class Trap : public Instance<Trap> {
 	private:
 
 		friend Proxy<Trap>;
 
-		inline Trap(Handle<Object> target) : Instance(target) {};
+		inline Trap(Proxy<Trap> *proxy, Handle<Object> target) : Instance(proxy, target) {};
 
 	public:
 
@@ -144,14 +143,15 @@ namespace tomorrow {
 
 
 	// A direct passthrough proxy - basically, just prototype inheritance, but
-	// where writes operate directly on the target, and invocations of the
-	// 'object' execute on the target.
+	// with writes operating directly on the target, and
 	class Direct : public Instance<Direct> {
 	private:
 
 		friend Proxy<Direct>;
 
-		inline Direct(Handle<Object> target) : Instance(target) {
+		static Persistent<FunctionTemplate> constructorTemplate;
+
+		inline Direct(Proxy<Direct> *proxy, Handle<Object> target) : Instance(proxy, target) {
 			NanObjectWrapHandle(this)->SetPrototype(target);
 		};
 
@@ -159,6 +159,8 @@ namespace tomorrow {
 			NanAssignPersistent(this->target, target);
 			NanObjectWrapHandle(this)->SetPrototype(target);
 		}
+
+		static NAN_METHOD(Direct::GetDirectProxy);
 
 	public:
 
